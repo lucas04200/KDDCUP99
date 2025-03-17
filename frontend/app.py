@@ -45,11 +45,14 @@ if "historique_data" not in st.session_state:
 if mode == "Temps Réel":
     df = get_data()
     if not df.empty:
+        # On ajoute un snapshot à l'historique (en limitant à 100 pour éviter de saturer la session)
+        if len(st.session_state.historique_data) >= 100:
+            st.session_state.historique_data.pop(0)  # On supprime le plus ancien
         st.session_state.historique_data.append(df.copy())
 else:
     if st.session_state.historique_data:
         max_steps = len(st.session_state.historique_data) - 1
-        step = st.slider("⏪ Revenir en arrière", 0, max_steps, max_steps)
+        step = st.slider("⏪ Revenir en arrière", 0, max_steps, max_steps, key="replay_step")
         df = st.session_state.historique_data[step]
     else:
         df = pd.DataFrame()
