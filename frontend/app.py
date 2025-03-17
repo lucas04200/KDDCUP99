@@ -2,11 +2,9 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import requests
-import time
 
-# ✅ Mettre set_page_config en premier
+# ✅ Configuration de la page
 st.set_page_config(page_title="Network Traffic Dashboard", layout="wide")
-
 st.title("🌐 Network Traffic Dashboard (KDDCUP99)")
 
 # ✅ URL du backend dans Docker
@@ -36,12 +34,25 @@ def get_data():
         st.error("❌ Impossible de récupérer les données du backend.")
         return pd.DataFrame()
 
-# ✅ Bouton pour actualiser les données
-if st.button("🔄 Actualiser les données"):
-    st.cache_data.clear()
+# ✅ Mode de visualisation : Temps réel ou Replay
+mode = st.radio("🔄 Mode de visualisation", ["Temps Réel", "Replay"])
+
+# ✅ Stocker l'historique des données
+if "historique_data" not in st.session_state:
+    st.session_state.historique_data = []
 
 # ✅ Récupération des données
-df = get_data()
+if mode == "Temps Réel":
+    df = get_data()
+    if not df.empty:
+        st.session_state.historique_data.append(df.copy())
+else:
+    if st.session_state.historique_data:
+        max_steps = len(st.session_state.historique_data) - 1
+        step = st.slider("⏪ Revenir en arrière", 0, max_steps, max_steps)
+        df = st.session_state.historique_data[step]
+    else:
+        df = pd.DataFrame()
 
 if df.empty:
     st.warning("📭 Aucune donnée disponible.")
