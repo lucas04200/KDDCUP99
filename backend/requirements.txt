@@ -1,7 +1,7 @@
-fastapi 
-uvicorn 
-tensorflow 
-pillow 
-prometheus_client
-evidently
-python-multipart
+requests==2.32.3
+uvicorn==0.34.0
+matplotlib==3.10.0
+numpy==2.2.1
+pandas==2.2.3
+scikit_learn==1.6.1
+fastapi==0.115.6
