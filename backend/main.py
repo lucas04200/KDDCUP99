@@ -1,47 +1,60 @@
 from fastapi import FastAPI
 import pandas as pd
+import pickle
+from pydantic import BaseModel
+import uvicorn
 
 app = FastAPI()
 
-# Chemin du fichier CSV
-DATASET_PATH = "/app/data/csv/KDDCup99.csv"
+# Charger le dataset prétraité
+DATA_PATH = "/app/data/csv/KDDCup99.csv"
+df = pd.read_csv(DATA_PATH, sep=',')
+df['label'] = (df['label'] != 'normal').astype(int)  # Convertir en 0 (normal) / 1 (anomalie)
 
-# Charger et traiter le dataset une seule fois au démarrage de l'application
-df = pd.read_csv(DATASET_PATH, header=None, dtype=str, low_memory=False)
+# Charger le modèle
+MODEL_PATH = "/app/artifacts/model.pkl"
+with open(MODEL_PATH, "rb") as model_file:
+    model = pickle.load(model_file)
+
+# Sélectionner les colonnes pertinentes (exclure label si utilisé)
+FEATURES = df.drop(columns=["label"]).columns.tolist()
+
+class ConnectionData(BaseModel):
+    features: list
+
+@app.get("/data")
+async def get_data():
+    """Retourne un échantillon des connexions réseau."""
+    return df.sample(50).to_dict(orient="records")  # Renvoie 50 connexions aléatoires
 
 
-df.columns = ["duration", "protocol_type", "service", "flag", "src_bytes", "dst_bytes", "land",
-              "wrong_fragment", "urgent", "hot", "num_failed_logins", "logged_in", "num_compromised",
-              "root_shell", "su_attempted", "num_root", "num_file_creations", "num_shells",
-              "num_access_files", "num_outbound_cmds", "is_host_login", "is_guest_login", "count",
-              "srv_count", "serror_rate", "srv_serror_rate", "rerror_rate", "srv_rerror_rate",
-              "same_srv_rate", "diff_srv_rate", "srv_diff_host_rate", "dst_host_count", "dst_host_srv_count",
-              "dst_host_same_srv_rate", "dst_host_diff_srv_rate", "dst_host_same_src_port_rate",
-              "dst_host_srv_diff_host_rate", "dst_host_serror_rate", "dst_host_srv_serror_rate",
-              "dst_host_rerror_rate", "dst_host_srv_rerror_rate", "label"]
+@app.post("/predict")
+async def predict(data: ConnectionData):
+    """Détection d'anomalie sur un échantillon de connexions (max 100 lignes)."""
+    print("Nombre de connexions reçues :", len(data.features))
+    
+    try:
+        # Création du DataFrame avec toutes les connexions envoyées
+        df_input = pd.DataFrame(data.features, columns=FEATURES)
 
-# Convertiond de toutes les colonnes pour du numérique
-cols_to_convert = ["dst_bytes", "src_bytes", "num_failed_logins", "count", "srv_count", 
-                   "serror_rate", "srv_serror_rate", "rerror_rate", "srv_rerror_rate", "same_srv_rate", 
-                   "diff_srv_rate", "srv_diff_host_rate", "dst_host_count", "dst_host_srv_count", 
-                   "dst_host_same_srv_rate", "dst_host_diff_srv_rate", "dst_host_same_src_port_rate", 
-                   "dst_host_srv_diff_host_rate", "dst_host_serror_rate", "dst_host_srv_serror_rate", 
-                   "dst_host_rerror_rate", "dst_host_srv_rerror_rate"]
+        # Sélectionner un échantillon de 500 lignes max
+        if len(df_input) > 500:
+            df_input = df_input.sample(n=500, random_state=42)
 
-df[cols_to_convert] = df[cols_to_convert].apply(pd.to_numeric, errors='coerce')
+        print(f"Données envoyées pour prédiction ({len(df_input)} lignes) :\n", df_input.head())
 
-# Home
-@app.get("/")
-def hello_world():
-    return {"message": "Hello World - FastAPI"}
+        # Appliquer le même encodage qu'à l'entraînement
+        df_input_encoded = pd.get_dummies(df_input, columns=['protocol_type', 'service', 'flag'])
 
-# Route pour les données aléatoire
-@app.get("/get_data")
-def get_data():
-    sampled_data = df.sample(100) # Échantillonnage 
-    return sampled_data.to_dict(orient="records")
+        # Assurer que les colonnes correspondent à celles du modèle
+        train_columns = model.feature_names_in_
+        df_input_encoded = df_input_encoded.reindex(columns=train_columns, fill_value=0)
 
-# Route pour récupérer les colonnes disponibles
-@app.get("/columns")
-def get_columns():
-    return {"columns": list(df.columns)}
+        # Prédiction
+        predictions = model.predict(df_input_encoded)
+
+        # Retourne les prédictions sous forme de liste
+        return {"predictions": predictions.tolist()}
+    
+    except Exception as e:
+        return {"error": str(e)}
