@@ -1,13 +1,6 @@
 version: '3.8'
 
 services:
-  backend:
-    build: ./backend
-    container_name: backend
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./data:/app/data
   frontend:
     build: ./frontend
     container_name: frontend
@@ -15,4 +8,12 @@ services:
       - "8501:8501"
     depends_on:
       - backend
+  backend:
+    build: ./backend
+    container_name: backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./artifacts:/artifacts
 

@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+import pickle
 
 st.title("Hackathon")
 
@@ -16,3 +17,7 @@ try:
         st.error(f"Erreur {response.status_code} lors de l'appel à l'API")
 except requests.exceptions.ConnectionError:
     st.error("Impossible de contacter l'API. Vérifiez si le backend est démarré.")
+
+
+
+
