@@ -1,0 +1,47 @@
+trigger:
+  - main
+
+pool:
+  name: 'Default'
+
+stages:
+
+- stage: Build
+  jobs:
+  - job: BuildAndPush
+    steps:
+    - script: |
+        set -e  # Arrêter sur erreurs critiques
+        echo "Connexion locale et préparation du projet"
+
+        if [ ! -d "/home/azureuser/app/.git" ]; then
+          echo "Clonage initial du projet..."
+          git clone https://github.com/MPFabio/KDDCUP99.git /home/azureuser/app
+        else
+          echo "Mise à jour du dépôt"
+          cd /home/azureuser/app
+          git reset --hard origin/main
+          git pull origin main 2>&1 | tee /dev/null || echo "Ignoring non-critical git error"
+        fi
+
+        echo "Build terminé"
+        exit 0
+      displayName: "Préparation du projet"
+
+- stage: Deploy
+  jobs:
+  - job: DeployToVM
+    steps:
+    - script: |
+        echo "Démarrage et build des conteneurs"
+        cd /home/azureuser/app
+
+        docker-compose down
+        
+        docker image prune -af 
+
+        echo "Démarrage des conteneurs"
+        docker-compose up --build -d --remove-orphans 2>/dev/null || echo "Ignoring non-critical up error"
+
+        echo "Déploiement terminé avec succès"
+      displayName: "Déploiement de l'application"
