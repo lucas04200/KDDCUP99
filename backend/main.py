@@ -23,7 +23,7 @@ class ConnectionData(BaseModel):
     features: list
 
 @app.get("/data")
-async def get_data(num_connections: int = 150):  # Valeur par défaut = 50
+async def get_data(num_connections: int = 1000):  # Valeur par défaut = 50
     """Retourne un échantillon des connexions réseau."""
     return df.sample(num_connections).to_dict(orient="records")
 
@@ -37,15 +37,14 @@ async def predict(data: ConnectionData):
         # Création du DataFrame avec toutes les connexions envoyées
         df_input = pd.DataFrame(data.features, columns=FEATURES)
 
-        # Sélectionner un échantillon de 500 lignes max
-        if len(df_input) > 500:
-            df_input = df_input.sample(n=500, random_state=42)
+        # Sélectionner un échantillon de 1000 lignes max
+        if len(df_input) > 1000:
+            df_input = df_input.sample(n=1000, random_state=42)
 
         print(f"Données envoyées pour prédiction ({len(df_input)} lignes) :\n", df_input.head())
 
-        # Appliquer le même encodage qu'à l'entraînement
         df_input_encoded = pd.get_dummies(df_input, columns=['protocol_type', 'service', 'flag'])
-
+      
         # Assurer que les colonnes correspondent à celles du modèle
         train_columns = model.feature_names_in_
         df_input_encoded = df_input_encoded.reindex(columns=train_columns, fill_value=0)
