@@ -1,18 +1,18 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-import time
 import requests
-import datetime
+import plotly.express as px
+import json
 
 # ✅ Configuration de la page
 st.set_page_config(page_title="🔍 Détection d'Anomalies Réseau", layout="wide")
 st.title("🚀 Détection d'Anomalies Réseau")
 
 # ✅ URL du backend FastAPI
-API_URL = "http://backend:8000"  # Assurez-vous que l'URL correspond à votre backend (ajustez si nécessaire)
+API_URL = "http://backend:8000"  # URL du backend
 
-# ✅ Fonction pour récupérer les données
+# ✅ Fonction de récupération des données
+@st.cache_data
 def get_data():
     response = requests.get(f"{API_URL}/data")
     if response.status_code == 200:
@@ -21,92 +21,127 @@ def get_data():
         st.error("❌ Erreur lors de la récupération des données.")
         return pd.DataFrame()
 
-# ✅ Chargement des données
-if "df" not in st.session_state:
-    st.session_state.df = get_data()
-df = st.session_state.df
+# ✅ Fonction de détection d'anomalies
+import pandas as pd
+import requests
+import json
 
-# ✅ Fonction de prédiction (données en batch)
+# ✅ Fonction de détection d'anomalies avec sérialisation JSON
 def detect_anomalie_batch(connections):
-    response = requests.post(f"{API_URL}/predict_batch", json={"features": connections})
-    if response.status_code == 200:
-        return response.json().get("predictions", None)
-    return None
-
-# ✅ Mode de visualisation
-mode = st.radio("🔄 Mode de visualisation", ["Temps Réel (Simulé)", "Replay"])
-
-# ✅ Stockage de l’historique en session
-if "historique" not in st.session_state:
-    st.session_state.historique = []
-
-# ✅ Simulation en temps réel
-if mode == "Temps Réel (Simulé)":
-    if len(st.session_state.historique) == 0:
-        st.session_state.historique.append(df.iloc[0:1])
+    # Convertir toutes les données de type pandas en types natifs Python compatibles avec JSON
+    def convert_to_native_types(data):
+        if isinstance(data, pd.Series):  # Si c'est une Series pandas
+            return data.to_dict()  # Convertir en dictionnaire (clé/valeur)
+        elif isinstance(data, pd.DataFrame):  # Si c'est un DataFrame pandas
+            return data.applymap(lambda x: x.item() if isinstance(x, pd.Timestamp) else x).to_dict(orient="records")
+        else:
+            return data  # Si ce n'est pas un type pandas, retourner tel quel
     
-    last_step = len(st.session_state.historique[-1])
-    new_step = min(last_step + 5, len(df))
+    # Convertir les données de type pandas
+    connections_converted = [convert_to_native_types(c) for c in connections]
     
-    if new_step > last_step:
-        new_data = df.iloc[last_step:new_step].copy()
-        # Appliquer la détection d'anomalies sur un lot de données (batch)
-        new_data["anomalie"] = detect_anomalie_batch(new_data.drop(columns=["label"]).values.tolist())
-        st.session_state.historique.append(new_data)
-        time.sleep(1)  # Pause pour éviter le spam
+    # Sérialisation avec json.dumps pour gérer les types spécifiques
+    try:
+        response = requests.post(f"{API_URL}/predict", json={"features": connections_converted})
+        if response.status_code == 200:
+            return response.json().get("predictions", None)
+        else:
+            return None
+    except Exception as e:
+        print(f"Erreur lors de l'envoi de la requête : {e}")
+        return None
 
-    df_affiche = st.session_state.historique[-1]
-else:
-    step = st.slider("⏪ Revenir dans le temps", 0, len(df) - 1, len(df) - 1)
-    df_affiche = df.iloc[:step]
+# ✅ Chargement des données
+df = get_data()
 
-# ✅ Filtres
+# --- Filtres ---
 st.sidebar.header("🔎 Filtres")
-protocols = st.sidebar.multiselect("📡 Filtrer par Protocole", df["protocol_type"].unique(), default=df["protocol_type"].unique())
 services = st.sidebar.multiselect("🛠️ Filtrer par Service", df["service"].unique(), default=df["service"].unique())
+labels = st.sidebar.multiselect("🏷️ Filtrer par Label", df["label"].unique(), default=df["label"].unique())
+time_range = st.sidebar.slider("🕒 Plage de connexions", 0, len(df) - 1, (0, len(df) - 1))
 
-df_filtered = df_affiche[df_affiche["protocol_type"].isin(protocols) & df_affiche["service"].isin(services)]
+df_filtered = df[df["service"].isin(services) & df["label"].isin(labels)]
+df_filtered = df_filtered[(df_filtered.index >= time_range[0]) & (df_filtered.index <= time_range[1])]
+
+# --- Visualisation des Connexions Réseau par Protocole ---
+st.subheader("📡 Visualisation des Flux Réseau par Protocole")
+
+# Vérification que la colonne 'protocol_type' existe
+if 'protocol_type' in df.columns:
+    # Affichage des protocoles disponibles
+    protocols = df['protocol_type'].unique()
+    st.write("Protocole(s) présent(s) dans les données :", protocols)
+    
+    for protocol in protocols:
+        st.write(f"### Protocole: {protocol}")
+        
+        # Filtrer les données par protocole
+        df_protocol = df[df['protocol_type'] == protocol]
+        
+        # Visualisation avec Plotly
+        fig = px.scatter(
+            df_protocol, 
+            x='src_bytes', y='dst_bytes',  # Utilisation de src_bytes et dst_bytes
+            color='service', 
+            size='src_bytes', 
+            hover_data=['protocol_type', 'src_bytes', 'dst_bytes'], 
+            title=f"Flux Réseau - Protocole {protocol}",
+            labels={"src_bytes": "Bytes Source", "dst_bytes": "Bytes Destination"}
+        )
+        st.plotly_chart(fig)
+else:
+    st.error("❌ La colonne 'protocol_type' est manquante dans les données.")
+
+# --- Partie 2 : Simulation et Lecture des Données ---
+st.subheader("🔄 Simulation des Données")
+
+# Slider pour replay des données
+index_simulation = st.slider("⚙️ Contrôler la simulation", 0, len(df_filtered) - 1, 0)
+
+# Afficher la ligne correspondante à l'index sélectionné
+st.write(f"📡 Connexion simulée :")
+st.write(df_filtered.iloc[index_simulation])
+
+# Affichage des anomalies détectées pour cette connexion simulée
+st.write("⚠️ Anomalies détectées pour cette simulation :")
+connection = df_filtered.iloc[index_simulation].drop(columns=["label"]).values.tolist()  # Exclure la colonne "label" pour la prédiction
+anomalie = detect_anomalie_batch([connection])
+
+if anomalie and anomalie[0] == 1:
+    st.error("🚨 Anomalie détectée !")
+else:
+    st.success("✅ Aucune anomalie détectée.")
 
 
-
-
-# ✅ Statistiques
-st.sidebar.subheader("📊 Statistiques Globales")
-st.sidebar.metric("Total Connexions", len(df_filtered))
-st.sidebar.metric("Anomalies Détectées", len(df_filtered[df_filtered["anomalie"] == "Anomalie"]))
-
-# ✅ Visualisation des connexions
-st.subheader("📡 Visualisation des Flux Réseau")
-st.plotly_chart(px.scatter(df_filtered, x="src_bytes", y="dst_bytes", color="protocol_type", hover_data=["service", "flag"], title="Trafic Réseau"), use_container_width=True)
-
-# ✅ Distribution des protocoles
-st.subheader("📊 Répartition des Protocoles")
-st.plotly_chart(px.histogram(df_filtered, x="protocol_type", title="Distribution des Protocoles", color="protocol_type"), use_container_width=True)
-
-# ✅ Détection des Anomalies
-st.subheader("🔍 Détection des Anomalies")
+# --- Détection des Anomalies ---
+st.subheader("🔍 Analyse des Anomalies")
 seuil_anomalie = st.slider("⚠️ Seuil d'alerte (min anomalies)", 1, 50, 10)
-df_anomalies = df_filtered[df_filtered["anomalie"] == "Anomalie"]
+df_filtered["anomalie"] = detect_anomalie_batch(df_filtered.drop(columns=["label"]).values.tolist())
+df_anomalies = df_filtered[df_filtered["anomalie"] == 1]
+
 if len(df_anomalies) > seuil_anomalie:
     st.error(f"🚨 Alerte : {len(df_anomalies)} anomalies détectées !")
 
-st.dataframe(df_anomalies[["protocol_type", "service", "src_bytes", "dst_bytes", "label"]])
+st.dataframe(df_anomalies[["service", "src_bytes", "dst_bytes", "label", "anomalie"]])
 
-# ✅ Journalisation et export
-st.subheader("📜 Journalisation et Export")
-if st.button("📥 Exporter les logs d'anomalies"):
-    df_anomalies.to_csv("logs_anomalies.csv", index=False)
-    st.success("✅ Logs exportés sous 'logs_anomalies.csv'.")
+# --- Visualisation des Anomalies ---
+st.subheader("📊 Distribution des Anomalies")
+fig = px.histogram(df_anomalies, x="service", color="label", title="Répartition des Anomalies par Service")
+st.plotly_chart(fig)
 
-# ✅ Graphique des anomalies
-st.plotly_chart(px.pie(df_anomalies, names="protocol_type", title="Anomalies par Protocole"), use_container_width=True)
-
-# ✅ Stockage des anomalies pour audit
+# --- Journalisation des Anomalies ---
 if "log_anomalies" not in st.session_state:
     st.session_state.log_anomalies = pd.DataFrame(columns=df_anomalies.columns)
+
 st.session_state.log_anomalies = pd.concat([st.session_state.log_anomalies, df_anomalies]).drop_duplicates()
 st.dataframe(st.session_state.log_anomalies)
+csv = st.session_state.log_anomalies.to_csv(index=False)
 
-if st.button("📥 Exporter le journal des anomalies"):
-    st.session_state.log_anomalies.to_csv("journal_anomalies.csv", index=False)
-    st.success("✅ Journal exporté sous 'journal_anomalies.csv'.")
+st.download_button(
+    label="📥 Télécharger le journal des anomalies",
+    data=csv,
+    file_name="journal_anomalies.csv",
+    mime="text/csv"
+)
+
+st.success("✅ Vous pouvez télécharger le journal des anomalies.")

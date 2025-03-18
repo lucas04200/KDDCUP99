@@ -23,9 +23,9 @@ class ConnectionData(BaseModel):
     features: list
 
 @app.get("/data")
-async def get_data():
+async def get_data(num_connections: int = 150):  # Valeur par défaut = 50
     """Retourne un échantillon des connexions réseau."""
-    return df.sample(50).to_dict(orient="records")  # Renvoie 50 connexions aléatoires
+    return df.sample(num_connections).to_dict(orient="records")
 
 
 @app.post("/predict")
