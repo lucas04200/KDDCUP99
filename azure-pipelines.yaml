@@ -16,7 +16,7 @@ stages:
 
         if [ ! -d "/home/azureuser/app/.git" ]; then
           echo "Clonage initial du projet..."
-          git clone https://github.com/MPFabio/KDDCUP99.git /home/azureuser/app
+          git clone https://github.com/lucas04200/KDDCUP99.git /home/azureuser/app
         else
           echo "Mise à jour du dépôt"
           cd /home/azureuser/app
