@@ -5,9 +5,11 @@ from utils import get_data, detect_anomalie_batch, apply_filters
 
 st.title("📋 Journal des Anomalies Réseau")
 
+# Récupérer les données
 df = get_data()
 df_filtered = apply_filters(df)
 
+# Drop colonne label
 df_filtered["anomalie"] = detect_anomalie_batch(df_filtered.drop(columns=["label"]).values.tolist())
 df_anomalies = df_filtered[df_filtered["anomalie"] == 1]
 
@@ -19,7 +21,7 @@ st.dataframe(st.session_state.log_anomalies)
 
 # Sauvegarde CSV
 csv = st.session_state.log_anomalies.to_csv(index=False)
-
+# Bouton de sauvegarde du dataframe
 st.download_button(
     label="📥 Télécharger le journal des anomalies",
     data=csv,
@@ -27,5 +29,6 @@ st.download_button(
     mime="text/csv"
 )
 
+# Histogramme des anomalies par service
 fig = px.histogram(df_anomalies, x="service", color="label", title="Répartition des Anomalies par Service")
 st.plotly_chart(fig)

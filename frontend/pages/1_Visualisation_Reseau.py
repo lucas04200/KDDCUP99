@@ -4,9 +4,11 @@ from utils import get_data, apply_filters
 
 st.title("📡 Visualisation des Flux Réseau")
 
+# Récupérer les données
 df = get_data()
 df_filtered = apply_filters(df)
 
+# Affichage des protocoles
 if 'protocol_type' in df.columns:
     protocols = df['protocol_type'].unique()
     for protocol in protocols:

@@ -31,10 +31,9 @@ async def predict(data: ConnectionData):
     """Détection d'anomalie sur un échantillon de connexions (max 1000 lignes)."""
     print("Nombre de connexions reçues :", len(data.features))
     try:
-        # Création du DataFrame avec toutes les connexions envoyées
+        # Premier Dataframe
         df_input = pd.DataFrame(data.features, columns=FEATURES)
 
-        # Vérifier les types de colonnes avant d'envoyer les données
         print("Types de colonnes avant le traitement :\n", df_input.dtypes)
 
         # Convertir les colonnes catégorielles en type string
@@ -42,9 +41,9 @@ async def predict(data: ConnectionData):
 
         print("Dtypes avant transformation :")
         print(df_input.dtypes)
-        print(df_input.head())  # Pour inspecter les premières lignes de données
+        print(df_input.head())
 
-        # Vérifiez s'il y a des valeurs NaN ou des types inattendus dans les colonnes
+        # Verification s'il y a des valeurs NaN dans les colonnes
         print(df_input.isnull().sum())
 
 
@@ -64,7 +63,6 @@ async def predict(data: ConnectionData):
         # Prédiction
         predictions = model.predict(df_input_encoded)
 
-        # Retourne les prédictions sous forme de liste
         return {"predictions": predictions.tolist()}
     
     except Exception as e:

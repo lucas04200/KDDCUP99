@@ -4,6 +4,7 @@ import requests
 
 API_URL = "http://backend:8000"  # URL du backend FastAPI
 
+# Récupération des données du backend
 @st.cache_data
 def get_data():
     response = requests.get(f"{API_URL}/data")
@@ -13,6 +14,7 @@ def get_data():
         st.error("❌ Erreur lors de la récupération des données.")
         return pd.DataFrame()
 
+# detection des anomalies
 def detect_anomalie_batch(connections):
     """Détecte les anomalies en envoyant les connexions au backend"""
     
@@ -37,7 +39,7 @@ def detect_anomalie_batch(connections):
         print(f"Erreur lors de l'envoi de la requête : {e}")
         return None
 
-
+# pouvoir appliquer le filtre sur la page
 def apply_filters(df):
     st.sidebar.header("🔎 Filtres")
     services = st.sidebar.multiselect("🛠️ Filtrer par Service", df["service"].unique(), default=df["service"].unique())
